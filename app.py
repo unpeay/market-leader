@@ -3,7 +3,9 @@ import requests
 import pandas as pd
 from bs4 import BeautifulSoup
 import time
-from datetime import datetime
+from datetime import datetime, timedelta
+import json
+import os
 
 # ==========================================
 # ⚙️ 1. 앱 설정 & 디자인 (KT Corporate Style)
@@ -63,7 +65,6 @@ st.markdown("""
     /* 뱃지 */
     .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-right: 6px; vertical-align: middle; }
     .badge-rank { background:#333; color:white; }
-    .badge-power { background:#e3f2fd; color:#1565c0; border: 1px solid #1565c0; }
     
     /* 전문가 분석 섹션 (Highlight) */
     .expert-box {
@@ -86,7 +87,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🧠 2. 데이터 엔진 (Hybrid & Expert Logic)
+# 🧠 2. 데이터 엔진 (Smart Token & Expert Logic)
 # ==========================================
 
 class KIS_API:
@@ -95,14 +96,42 @@ class KIS_API:
         self.secret = app_secret
         self.base_url = "https://openapi.koreainvestment.com:9443"
         self.token = None
+        self.token_file = "kis_token_save.json" # 토큰 저장 파일
 
     def auth(self):
+        """스마트 토큰 관리: 파일에서 읽거나 새로 발급"""
+        # 1. 저장된 토큰 확인
+        if os.path.exists(self.token_file):
+            try:
+                with open(self.token_file, 'r') as f:
+                    data = json.load(f)
+                
+                # 유효기간 체크 (10분 여유)
+                expire_dt = datetime.strptime(data['expired'], "%Y-%m-%d %H:%M:%S")
+                if datetime.now() < expire_dt:
+                    self.token = data['token']
+                    return True # 저장된 토큰 사용 (API 호출 X)
+            except:
+                pass 
+
+        # 2. 새로 발급 (API 호출 O)
         try:
             headers = {"content-type": "application/json"}
             body = {"grant_type": "client_credentials", "appkey": self.key, "appsecret": self.secret}
             res = requests.post(f"{self.base_url}/oauth2/tokenP", headers=headers, json=body)
+            
             if res.status_code == 200:
-                self.token = res.json()["access_token"]
+                res_json = res.json()
+                self.token = res_json["access_token"]
+                
+                # 만료 시간 계산 (24시간)
+                expires_in = int(res_json.get("expires_in", 86400))
+                expire_dt = datetime.now() + timedelta(seconds=expires_in - 600)
+                
+                # 파일 저장
+                with open(self.token_file, 'w') as f:
+                    json.dump({"token": self.token, "expired": expire_dt.strftime("%Y-%m-%d %H:%M:%S")}, f)
+                    
                 return True
             return False
         except: return False
@@ -119,6 +148,7 @@ class KIS_API:
             }
             params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}
             res = requests.get(f"{self.base_url}/uapi/domestic-stock/v1/quotation/inquire-price", headers=headers, params=params)
+            
             if res.status_code == 200:
                 d = res.json()['output']
                 return {
@@ -126,6 +156,9 @@ class KIS_API:
                     'high': int(d['stck_hgpr']), 'low': int(d['stck_lwpr']),
                     'vol': int(d['acml_vol'])
                 }
+            # 토큰 만료 에러(401, 403) 시 파일 삭제
+            elif res.status_code in [401, 403]:
+                if os.path.exists(self.token_file): os.remove(self.token_file)
         except: pass
         return None
 
@@ -135,13 +168,8 @@ def get_naver_detail_backup(code):
         url = f"https://finance.naver.com/item/main.naver?code={code}"
         res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
         soup = BeautifulSoup(res.text, 'html.parser')
-        
         no_today = soup.select_one('.no_today .blind')
         price = int(no_today.text.replace(',', '')) if no_today else 0
-        
-        # 고가/저가 찾기 (네이버 구조상 blind 태그들 중 위치 파악 필요)
-        # 보통: 전일, 고가, 상한, 거래량, 시가, 저가... 순서
-        # 정확도를 위해 sise.naver 사용
         return {'price': price, 'rate': 0.0, 'high': price, 'low': price, 'vol': 0}
     except:
         return {'price': 0, 'rate': 0.0, 'high': 0, 'low': 0, 'vol': 0}
@@ -154,21 +182,17 @@ def get_smart_money_flow(code):
         soup = BeautifulSoup(res.text, 'html.parser')
         rows = soup.select('.type2 tr')
         
-        # 최근 3일치 외인/기관 수급
         f_trend = []
-        i_trend = []
         cnt = 0
         for row in rows:
             cols = row.select('td')
             if len(cols) > 3 and cols[0].text.strip() != "":
                 f_val = int(cols[6].text.replace(',', '')) // 1000 # 천주 단위
-                i_val = int(cols[5].text.replace(',', '')) // 1000
                 f_trend.append(f_val)
-                i_trend.append(i_val)
                 cnt += 1
                 if cnt >= 3: break
                 
-        # 🤖 프로그램 매매 추정 로직 (외인이 사면 프로그램일 확률 높음)
+        # 🤖 프로그램 매매 추정 로직
         prog_msg = "관망세"
         if f_trend and f_trend[0] > 0:
             if f_trend[0] > 50: prog_msg = "🔥프로그램 대량 매수"
@@ -177,15 +201,13 @@ def get_smart_money_flow(code):
             if f_trend[0] < -50: prog_msg = "☔프로그램 매도(주의)"
             else: prog_msg = "↘️매도 우위"
             
-        return f_trend, i_trend, prog_msg
+        return f_trend, prog_msg
     except:
-        return [], [], "분석불가"
+        return [], "분석불가"
 
 # ⚡ [고수 기능 2] 종가 고가(High Close) 마감 확률 계산
 def calc_power_close(price, high, low):
-    if high == low: return 50 # 변동성 없음
-    
-    # 현재가가 고가에 얼마나 가까운지 (0~100점)
+    if high == low: return 50
     position = (price - low) / (high - low) * 100
     return int(position)
 
@@ -199,7 +221,7 @@ def get_full_analysis(code, name, kis_instance):
         source = "Web"
     
     # 2. 수급 및 프로그램 분석
-    f_trend, i_trend, prog_msg = get_smart_money_flow(code)
+    f_trend, prog_msg = get_smart_money_flow(code)
     
     # 3. 고수 지표 계산 (파워 클로즈)
     power_score = calc_power_close(data['price'], data['high'], data['low'])
@@ -216,7 +238,7 @@ def get_full_analysis(code, name, kis_instance):
     
     return {
         'price': data['price'], 'rate': data['rate'], 'vol': data['vol'],
-        'source': source, 'f_trend': f_trend, 'i_trend': i_trend,
+        'source': source, 'f_trend': f_trend,
         'prog_msg': prog_msg, 'power_score': power_score, 'news': news
     }
 
@@ -259,8 +281,15 @@ st.markdown('<div class="sub-title">고수들의 관점: <b>프로그램 수급<
 if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="primary"):
     
     kis = KIS_API(APP_KEY, APP_SECRET)
-    if kis.auth(): st.toast("API 연결 성공! 정밀 분석 모드 가동", icon="⚡")
-    else: st.toast("API 연결 실패. 웹 데이터로 대체합니다.", icon="⚠️")
+    
+    # auth()가 알아서 토큰을 재활용하거나 새로 받음
+    if kis.auth(): 
+        if os.path.exists("kis_token_save.json"):
+            st.toast("저장된 토큰 사용 (API 호출 절약) ⚡", icon="💾")
+        else:
+            st.toast("새로운 토큰 발급 완료!", icon="🔑")
+    else: 
+        st.toast("API 연결 실패. 웹 데이터로 대체합니다.", icon="⚠️")
     
     with st.spinner("시장 주도 테마 및 수급 분석 중..."):
         themes = get_themes()
@@ -279,23 +308,23 @@ if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="prim
         for idx, s in enumerate(theme['stocks']):
             d = get_full_analysis(s['code'], s['name'], kis)
             
-            # 스타일링 변수
+            # 스타일링
             p_fmt = f"{d['price']:,}원"
             rate_cls = "rate-up" if d['rate'] > 0 else "rate-down"
             rate_icon = "🔥" if d['rate'] >= 10 else ("🔺" if d['rate'] > 0 else "🔹")
             rank_icon = ["🥇대장", "🥈2등", "🥉3등"][idx]
             
-            # 파워 클로즈 (종가 고가) 멘트
+            # 파워 클로즈 멘트
             power_bar_width = d['power_score']
             power_ment = "일반 마감"
             if power_bar_width > 80: power_ment = "👑 최고가 마감 임박 (Buy)"
             elif power_bar_width > 50: power_ment = "양호한 흐름"
             elif power_bar_width < 20: power_ment = "윗꼬리 발생 (주의)"
             
-            # 외인 수급 텍스트화
+            # 외인 수급
             f_str = str(d['f_trend']).replace('[','').replace(']','') if d['f_trend'] else "-"
             
-            # HTML 생성 (들여쓰기 제거 버전)
+            # HTML 생성
             card_html = f"""
 <div class="stock-card">
     <div class="card-top-row">
