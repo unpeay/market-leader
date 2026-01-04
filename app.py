@@ -91,7 +91,6 @@ class KIS_API:
         self.token_file = "kis_token_save.json"
 
     def auth(self):
-        # 1. 저장된 토큰 확인
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, 'r') as f:
@@ -102,7 +101,6 @@ class KIS_API:
                     return True
             except: pass
 
-        # 2. 새로 발급
         try:
             headers = {"content-type": "application/json"}
             body = {"grant_type": "client_credentials", "appkey": self.key, "appsecret": self.secret}
@@ -160,10 +158,13 @@ def get_smart_money_flow(code):
         rows = soup.select('.type2 tr')
         
         f_trend = []
+        i_trend = []
         cnt = 0
         for row in rows:
             cols = row.select('td')
-            if len(cols) > 3 and cols[0].text.strip() != "":
+            if len(cols) > 6 and cols[0].text.strip() != "":
+                i_val = int(cols[5].text.replace(',', '')) // 1000
+                i_trend.append(i_val)
                 f_val = int(cols[6].text.replace(',', '')) // 1000
                 f_trend.append(f_val)
                 cnt += 1
@@ -177,9 +178,9 @@ def get_smart_money_flow(code):
             if f_trend[0] < -50: prog_msg = "☔프로그램 매도(주의)"
             else: prog_msg = "↘️매도 우위"
             
-        return f_trend, prog_msg
+        return f_trend, i_trend, prog_msg
     except:
-        return [], "분석불가"
+        return [], [], "분석불가"
 
 def calc_power_close(price, high, low):
     if high == low: return 50
@@ -193,7 +194,7 @@ def get_full_analysis(code, name, kis_instance):
         data = get_naver_detail_backup(code)
         source = "Web"
     
-    f_trend, prog_msg = get_smart_money_flow(code)
+    f_trend, i_trend, prog_msg = get_smart_money_flow(code)
     power_score = calc_power_close(data['price'], data['high'], data['low'])
     
     news = "관련 뉴스 없음"
@@ -207,7 +208,7 @@ def get_full_analysis(code, name, kis_instance):
     
     return {
         'price': data['price'], 'rate': data['rate'], 'vol': data['vol'],
-        'source': source, 'f_trend': f_trend,
+        'source': source, 'f_trend': f_trend, 'i_trend': i_trend,
         'prog_msg': prog_msg, 'power_score': power_score, 'news': news
     }
 
@@ -254,7 +255,7 @@ if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="prim
     kis = KIS_API(APP_KEY, APP_SECRET)
     if kis.auth(): 
         if os.path.exists("kis_token_save.json"):
-            st.toast("저장된 토큰 사용 (API 호출 절약) ⚡", icon="💾")
+            st.toast("저장된 토큰 사용 ⚡", icon="💾")
         else:
             st.toast("새로운 토큰 발급 완료!", icon="🔑")
     else: 
@@ -266,15 +267,19 @@ if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="prim
     if not themes: st.error("데이터 수신 실패")
     
     for theme in themes:
-        # 🚨 [수정 핵심] HTML 들여쓰기 제거를 위해 문자열 연결 방식 사용
-        html_content = ""
-        html_content += f'<div class="theme-box">'
-        html_content += f'  <div class="theme-header">'
-        html_content += f'      📦 [{theme["theme"]}] 섹터'
-        html_content += f'      <span class="theme-stat">🔥 주도주 Top 3</span>'
-        html_content += f'  </div>'
+        # [수정 1] 종목 없는 빈 테마 박스 삭제
+        if not theme['stocks']: continue
+
+        # [수정 2] HTML 줄바꿈(.replace('\n', '')) 제거하여 깨짐 방지
+        html_header = f"""
+        <div class="theme-box">
+            <div class="theme-header">
+                📦 [{theme['theme']}] 섹터
+                <span class="theme-stat">🔥 주도주 Top 3</span>
+            </div>
+        """.replace('\n', '')
         
-        st.markdown(html_content, unsafe_allow_html=True)
+        st.markdown(html_header, unsafe_allow_html=True)
         
         for idx, s in enumerate(theme['stocks']):
             d = get_full_analysis(s['code'], s['name'], kis)
@@ -286,52 +291,59 @@ if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="prim
             
             power_bar_width = d['power_score']
             power_ment = "일반 마감"
-            if power_bar_width > 80: power_ment = "👑 최고가 마감 임박 (Buy)"
+            if power_bar_width > 80: power_ment = "👑 최고가 마감 임박"
             elif power_bar_width > 50: power_ment = "양호한 흐름"
             elif power_bar_width < 20: power_ment = "윗꼬리 발생 (주의)"
             
             f_str = str(d['f_trend']).replace('[','').replace(']','') if d['f_trend'] else "-"
+            i_str = str(d['i_trend']).replace('[','').replace(']','') if d['i_trend'] else "-"
             
-            # 🚨 [수정 핵심] HTML 코드를 한 줄씩 이어 붙여서 들여쓰기 문제 원천 차단
-            card_html = ""
-            card_html += f'<div class="stock-card">'
-            card_html += f'  <div class="card-top-row">'
-            card_html += f'    <div>'
-            card_html += f'      <span class="badge badge-rank">{rank_icon}</span>'
-            card_html += f'      <span class="stock-name">{s["name"]}</span>'
-            card_html += f'      <span style="font-size:0.7rem; color:#bbb; margin-left:4px;">{d["source"]}</span>'
-            card_html += f'    </div>'
-            card_html += f'    <div>'
-            card_html += f'      <span class="{rate_cls}">{rate_icon} {d["rate"]}%</span>'
-            card_html += f'      <span style="font-size:0.95rem; font-weight:700; color:#333; margin-left:8px;">{p_fmt}</span>'
-            card_html += f'    </div>'
-            card_html += f'  </div>'
+            # [수정 2] HTML 줄바꿈 제거 적용
+            card_html = f"""
+            <div class="stock-card">
+                <div class="card-top-row">
+                    <div>
+                        <span class="badge badge-rank">{rank_icon}</span>
+                        <span class="stock-name">{s['name']}</span>
+                        <span style="font-size:0.7rem; color:#bbb; margin-left:4px;">{d['source']}</span>
+                    </div>
+                    <div>
+                        <span class="{rate_cls}">{rate_icon} {d['rate']}%</span>
+                        <span style="font-size:0.95rem; font-weight:700; color:#333; margin-left:8px;">{p_fmt}</span>
+                    </div>
+                </div>
+                
+                <div class="expert-box">
+                    <div class="expert-row">
+                        <span class="expert-label">🤖 프로그램 추정</span>
+                        <span class="expert-val" style="color:#1A237E;">{d['prog_msg']}</span>
+                    </div>
+                    <div class="expert-row">
+                        <span class="expert-label">👽 외인(3일)</span>
+                        <span class="expert-val">{f_str}</span>
+                    </div>
+                    <div class="expert-row">
+                        <span class="expert-label">🏦 기관(3일)</span>
+                        <span class="expert-val">{i_str}</span>
+                    </div>
+                    
+                    <div style="margin-top:8px;">
+                        <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; font-weight:bold;">
+                            <span>⚡ 마감 강도(Power Close)</span>
+                            <span>{power_ment} ({d['power_score']}%)</span>
+                        </div>
+                        <div class="prob-bar-bg">
+                            <div class="prob-bar-fill" style="width: {power_bar_width}%;"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="news-section">
+                    📰 <a href="#" class="news-link">{d['news']}</a>
+                </div>
+            </div>
+            """.replace('\n', '') # 핵심: 여기서 줄바꿈을 다 없앰
             
-            card_html += f'  <div class="expert-box">'
-            card_html += f'    <div class="expert-row">'
-            card_html += f'      <span class="expert-label">🤖 프로그램 추정</span>'
-            card_html += f'      <span class="expert-val" style="color:#1A237E;">{d["prog_msg"]}</span>'
-            card_html += f'    </div>'
-            card_html += f'    <div class="expert-row">'
-            card_html += f'      <span class="expert-label">👽 외인(3일)</span>'
-            card_html += f'      <span class="expert-val">{f_str}</span>'
-            card_html += f'    </div>'
-            card_html += f'    <div style="margin-top:8px;">'
-            card_html += f'      <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; font-weight:bold;">'
-            card_html += f'        <span>⚡ 마감 강도(Power Close)</span>'
-            card_html += f'        <span>{power_ment} ({d["power_score"]}%)</span>'
-            card_html += f'      </div>'
-            card_html += f'      <div class="prob-bar-bg">'
-            card_html += f'        <div class="prob-bar-fill" style="width: {power_bar_width}%;"></div>'
-            card_html += f'      </div>'
-            card_html += f'    </div>'
-            card_html += f'  </div>'
-
-            card_html += f'  <div class="news-section">'
-            card_html += f'    📰 <a href="#" class="news-link">{d["news"]}</a>'
-            card_html += f'  </div>'
-            card_html += f'</div>'
-
             st.markdown(card_html, unsafe_allow_html=True)
             
         st.markdown('</div>', unsafe_allow_html=True)
