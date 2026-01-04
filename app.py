@@ -6,7 +6,7 @@ from datetime import datetime
 import time
 
 # ==========================================
-# ⚙️ 1. 앱 설정 & 디자인
+# ⚙️ 1. 앱 설정 & 디자인 (Mobile First)
 # ==========================================
 st.set_page_config(
     page_title="마켓 리더 Mobile",
@@ -15,11 +15,13 @@ st.set_page_config(
     initial_sidebar_state="collapsed"
 )
 
+# 🎨 디자인 시스템 (다크모드 + 카드 UI + 테마 그룹핑)
 st.markdown("""
 <style>
+    /* 전체 배경 */
     .stApp { background-color: #121212; }
     
-    /* 테마 헤더 */
+    /* 테마 헤더 (섹션 구분) */
     .theme-header {
         font-size: 1.3rem;
         font-weight: 900;
@@ -30,7 +32,7 @@ st.markdown("""
         border-bottom: 1px solid #333;
     }
     
-    /* 종목 카드 */
+    /* 카드 디자인 */
     .stock-card {
         background-color: #1E1E1E;
         padding: 15px;
@@ -40,8 +42,10 @@ st.markdown("""
         box-shadow: 0 4px 6px rgba(0,0,0,0.2);
     }
     
-    /* 종목명 */
-    .stock-title { font-size: 1.1rem; font-weight: bold; color: white; }
+    /* 종목명 & 가격 */
+    .stock-title { font-size: 1.15rem; font-weight: bold; color: white; }
+    .price-up { color: #FF4B4B; font-weight: bold; float: right; font-size: 1.1rem; }
+    .price-down { color: #4B91FF; font-weight: bold; float: right; font-size: 1.1rem; }
     
     /* 뉴스 링크 */
     .news-item {
@@ -56,82 +60,67 @@ st.markdown("""
         border-left: 3px solid #444;
     }
     .news-item:hover { background-color: #333; color: white; border-left: 3px solid #FF4B4B; }
-    
     .news-meta { font-size: 0.75rem; color: #777; margin-top: 4px; }
     
-    /* 로딩 바 스타일 */
-    .stProgress > div > div > div > div { background-color: #FF4B4B; }
+    /* 뱃지 */
+    .badge-s { background-color: #FFD700; color: black; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight:bold; margin-left:5px;}
+    .badge-new { background-color: #FF4B4B; color: white; padding: 2px 6px; border-radius: 4px; font-size: 0.75rem; font-weight:bold; margin-left:5px;}
+    
+    /* 상세 정보 텍스트 */
+    .info-txt { font-size: 0.85rem; color: #aaa; margin-top: 5px; }
+    .flow-txt { font-size: 0.9rem; font-weight: bold; color: #eee; }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🧠 2. [핵심] 완전 자동화 분석 엔진
+# 🧠 2. 주말 모드 엔진 (하이브리드)
 # ==========================================
-
-# 1단계: 네이버 '테마 상위 랭킹'과 '구성 종목'을 실시간으로 긁어옴 (Dynamic Learning)
-@st.cache_data(ttl=1800) # 30분마다 갱신
-def build_dynamic_theme_map():
-    stock_to_theme = {} # { '삼성전자': '반도체', '에코프로': '2차전지' ... }
+@st.cache_data(ttl=600)
+def build_theme_map_hybrid():
+    # [안전장치] 수동 데이터 (크롤링 실패 시 작동)
+    stock_to_theme = {
+        '삼성전자': '반도체', 'SK하이닉스': '반도체', '한미반도체': '반도체/HBM',
+        '에코프로': '2차전지', '에코프로비엠': '2차전지', 'LG에너지솔루션': '2차전지', 'POSCO홀딩스': '2차전지',
+        '현대차': '자동차', '기아': '자동차',
+        '신성델타테크': '초전도체', '서남': '초전도체', '덕성': '초전도체',
+        '우리기술투자': '비트코인', '한화투자증권': '비트코인', '위지트': '비트코인',
+        '한화에어로스페이스': '방산', 'LIG넥스원': '방산', '빅텍': '방산',
+        '두산로보틱스': '로봇', '레인보우로보틱스': '로봇',
+        'HLB': '바이오', '알테오젠': '바이오', '셀트리온': '바이오',
+        'NAVER': '플랫폼', '카카오': '플랫폼',
+        '제주반도체': '온디바이스AI', '가온칩스': '온디바이스AI'
+    }
     
+    # [자동 학습] 네이버 테마 랭킹 긁어오기
     try:
-        # 네이버 테마별 시세 1페이지 (상위 40개 테마)
         url = "https://finance.naver.com/sise/theme.naver"
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=5)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=3)
         soup = BeautifulSoup(res.text, 'html.parser')
-        
-        # 테마 목록 가져오기
         themes = soup.select('.col_type1 a')
         
-        # 상위 15개 핫한 테마만 상세 조회 (속도 최적화)
-        progress_text = st.empty()
-        bar = st.progress(0)
-        
-        target_themes = themes[:15] 
-        
-        for idx, t in enumerate(target_themes):
-            theme_name = t.text.strip()
-            theme_link = "https://finance.naver.com" + t['href']
+        for t in themes[:15]: # 상위 15개 테마 학습
+            t_name = t.text.strip()
+            t_link = "https://finance.naver.com" + t['href']
             
-            # 진행상황 표시
-            progress_text.caption(f"📡 테마 학습 중... [{theme_name}] 분석")
-            bar.progress((idx + 1) / len(target_themes))
+            sub_res = requests.get(t_link, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
+            sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
+            stocks = sub_soup.select('.name_area .name a')
             
-            # 해당 테마 페이지 접속 -> 종목 긁어오기
-            try:
-                sub_res = requests.get(theme_link, headers=headers, timeout=3)
-                sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
-                
-                # 그 테마에 속한 종목들 (상위 5개 대장주만)
-                stocks = sub_soup.select('.name_area .name a')
-                for s in stocks[:5]: 
-                    s_name = s.text.strip()
-                    # 이미 등록된 종목이면 (다른 테마에도 속할 경우) 더 상위 테마 우선
-                    if s_name not in stock_to_theme:
-                        stock_to_theme[s_name] = theme_name
-            except: continue
-            
-        progress_text.empty()
-        bar.empty()
-        
-    except Exception as e:
-        print(e)
-        
+            for s in stocks[:5]: # 각 테마 대장주 5개
+                stock_to_theme[s.text.strip()] = t_name
+    except: pass
+    
     return stock_to_theme
 
-# 2단계: 뉴스 크롤링 & 위에서 만든 맵으로 자동 분류
-def get_news_and_classify(stock_map):
-    grouped_data = [] # 결과 담을 리스트
-    
+def get_news_hybrid(stock_map):
+    grouped_data = []
     try:
-        # 많이 본 뉴스
         url = "https://finance.naver.com/news/news_list.naver?mode=RANK&date=" + datetime.now().strftime("%Y%m%d")
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=5)
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=5)
         soup = BeautifulSoup(res.text, 'html.parser')
         news_list = soup.select('.newsList li')
         
-        for item in news_list[:40]: # 뉴스 40개 분석
+        for item in news_list[:40]:
             title_tag = item.select_one('a')
             if not title_tag: continue
             
@@ -139,44 +128,27 @@ def get_news_and_classify(stock_map):
             link = "https://finance.naver.com" + title_tag['href']
             press = item.select_one('.press').text.strip() if item.select_one('.press') else "뉴스"
             
-            # 🕵️‍♂️ 자동 분류 로직
-            found_stock = None
-            found_theme = "기타 이슈"
-            
-            # 우리가 학습한 종목 리스트(stock_map)에 있는 종목이 뉴스 제목에 있는지 확인
-            for stock_name, theme_name in stock_map.items():
-                if stock_name in title:
-                    found_stock = stock_name
-                    found_theme = theme_name
-                    break # 찾으면 중단
-            
-            # 종목을 못 찾았지만 뉴스 가치가 있다면? -> '기타'로 분류하거나 제외
-            if found_stock:
-                grouped_data.append({
-                    '테마': found_theme,
-                    '종목': found_stock,
-                    '제목': title,
-                    '링크': link,
-                    '언론사': press
-                })
-            else:
-                # 종목명은 없지만 테마명(예: 반도체, 2차전지)이 제목에 직접 있는 경우 처리
-                for stock_name, theme_name in stock_map.items():
-                    if theme_name in title: # 뉴스 제목에 '반도체'가 있으면
-                        grouped_data.append({
-                            '테마': theme_name,
-                            '종목': "섹터 종합",
-                            '제목': title,
-                            '링크': link,
-                            '언론사': press
-                        })
+            # 매칭 로직
+            found = False
+            # 1. 종목명 매칭
+            for s_name, t_name in stock_map.items():
+                if s_name in title:
+                    grouped_data.append({'테마': t_name, '종목': s_name, '제목': title, '링크': link, '언론사': press})
+                    found = True
+                    break
+            # 2. 테마명 매칭
+            if not found:
+                unique_themes = list(set(stock_map.values()))
+                for t_name in unique_themes:
+                    if t_name in title:
+                        grouped_data.append({'테마': t_name, '종목': '섹터 종합', '제목': title, '링크': link, '언론사': press})
                         break
-                        
     except: pass
-    
     return pd.DataFrame(grouped_data)
 
-# [평일용 API 함수들] (기존 유지)
+# ==========================================
+# 🧠 3. 평일 모드 엔진 (API + 분석)
+# ==========================================
 @st.cache_data(ttl=600)
 def get_live_hot_themes_weekday():
     try:
@@ -250,58 +222,56 @@ def get_supply_detail_5days(code):
     return f_list
 
 # ==========================================
-# 🖥️ 3. 메인 화면
+# 🖥️ 4. 메인 화면 & 실행 로직
 # ==========================================
-st.title("📈 마켓 리더 AI")
+st.title("📈 마켓 리더 Mobile")
 
 with st.sidebar:
     st.header("⚙️ 설정")
+    # 모드 선택 라디오 버튼
     mode = st.radio("모드 선택", ["평일(API)", "주말(뉴스)"], index=1)
     
     if mode == "평일(API)":
         try:
             APP_KEY = st.secrets["APP_KEY"]
             APP_SECRET = st.secrets["APP_SECRET"]
-            st.success("키 로드 완료")
+            st.success("✅ 키 로드 완료")
         except:
             APP_KEY = st.text_input("Key", type="password")
             APP_SECRET = st.text_input("Secret", type="password")
         URL_BASE = "https://openapi.koreainvestment.com:9443"
 
 # ----------------------------------------
-# A. 주말 모드 (AI 자동 분류)
+# A. 주말 모드 실행 (하이브리드)
 # ----------------------------------------
 if mode == "주말(뉴스)":
-    st.info("📰 네이버 금융을 실시간으로 학습하여 뉴스를 자동 분류합니다.")
+    st.info("📰 주말 이슈 스캔: 네이버 실시간 뉴스 + 자동 테마 분류")
     
-    if st.button("🚀 AI 주말 이슈 분석 시작", use_container_width=True, type="primary"):
+    if st.button("🚀 주말 분석 시작", use_container_width=True, type="primary"):
+        status = st.status("데이터 분석 중...", expanded=True)
         
-        # 1. 동적 테마맵 구축
-        with st.spinner("1단계: 현재 시장 주도 테마와 대장주를 학습 중입니다..."):
-            stock_map = build_dynamic_theme_map()
-            
-        # 2. 뉴스 분류
-        with st.spinner("2단계: 뉴스를 읽고 학습된 정보로 분류 중입니다..."):
-            df = get_news_and_classify(stock_map)
-            
+        status.write("📡 1. 시장 주도 테마 학습 중...")
+        stock_map = build_theme_map_hybrid()
+        
+        status.write("📰 2. 뉴스 크롤링 및 매칭 중...")
+        df = get_news_hybrid(stock_map)
+        
+        status.update(label="분석 완료!", state="complete", expanded=False)
+        
         if df.empty:
-            st.warning("분석된 관련 뉴스가 없습니다. (뉴스 제목에 학습된 종목명이 없을 수 있음)")
+            st.warning("매칭된 뉴스가 없습니다. (시장 이슈가 없거나 크롤링 차단)")
         else:
-            st.success(f"✅ 분석 완료! 총 {len(df)}건의 핵심 이슈를 찾았습니다.")
-            
-            # 3. 테마별 -> 종목별 그룹핑 출력
+            # 테마별 그룹핑 출력
             theme_groups = df.groupby('테마')
-            
-            # 테마 정렬 (뉴스 많은 순서대로)
             sorted_themes = sorted(theme_groups.groups.keys(), key=lambda x: len(theme_groups.get_group(x)), reverse=True)
             
             for theme in sorted_themes:
                 t_group = theme_groups.get_group(theme)
                 
-                # 📦 테마 헤더
-                st.markdown(f"<div class='theme-header'>📦 {theme} ({len(t_group)}건)</div>", unsafe_allow_html=True)
+                # [테마 헤더]
+                st.markdown(f"<div class='theme-header'>📦 {theme} ({len(t_group)})</div>", unsafe_allow_html=True)
                 
-                # 종목별 그룹핑
+                # [종목별 그룹핑]
                 stock_groups = t_group.groupby('종목')
                 
                 for stock_name, s_group in stock_groups:
@@ -314,31 +284,34 @@ if mode == "주말(뉴스)":
                         for idx, row in s_group.iterrows():
                             st.markdown(f"""
                             <a href="{row['링크']}" target="_blank" class="news-item">
-                                {row['제목']}
-                                <div class="news-meta">{row['언론사']}</div>
+                                {row['제목']} <div class="news-meta">{row['언론사']}</div>
                             </a>
                             """, unsafe_allow_html=True)
                         
                         st.markdown("</div>", unsafe_allow_html=True)
 
 # ----------------------------------------
-# B. 평일 모드 (기존 유지)
+# B. 평일 모드 실행 (API Full Version)
 # ----------------------------------------
 else:
     if st.button("🚀 실시간 분석 시작", use_container_width=True, type="primary"):
         if not APP_KEY:
-            st.error("설정에서 키를 입력하세요.")
+            st.error("⚠️ 설정에서 키를 입력하세요.")
         else:
             status = st.empty()
+            status.info("📡 장중 데이터 수신 중...")
             progress = st.progress(0)
             
             try:
-                # 로그인
+                # 1. 로그인
                 body = {"grant_type":"client_credentials", "appkey":APP_KEY, "appsecret":APP_SECRET}
                 res = requests.post(f"{URL_BASE}/oauth2/tokenP", headers={"content-type":"application/json"}, json=body)
+                if res.status_code != 200:
+                    st.error("로그인 실패 (서버 점검중 or 키 오류)")
+                    st.stop()
                 token = res.json()['access_token']
                 
-                # 데이터 요청
+                # 2. 데이터 조회
                 headers = {"content-type": "application/json", "authorization": f"Bearer {token}", "appkey": APP_KEY, "appsecret": APP_SECRET, "tr_id": "FHPST01710000", "custtype": "P"}
                 params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_COND_SCR_GRP_CODE": "11518", "FID_INPUT_ISCD_2": "0000", "FID_INPUT_CNT_1": "30", "FID_APLY_RANG_VOL": "0", "FID_RANK_SORT_CLS_CODE": "1", "FID_TRGT_CLS_CODE": "0", "FID_TRGT_EXLS_CLS_CODE": "0", "FID_INPUT_PRICE_1": "", "FID_INPUT_PRICE_2": "", "FID_VOL_CNT": ""}
                 
@@ -353,6 +326,8 @@ else:
                     name = item['hts_kor_isnm']
                     price = int(item['stck_prpr'])
                     rate = float(item['prdy_ctrt'])
+                    
+                    # 지표 계산
                     open_p = int(item['stck_oprc'])
                     high_p = int(item['stck_hgpr'])
                     low_p = int(item['stck_lwpr'])
@@ -377,20 +352,21 @@ else:
                 status.empty()
                 progress.empty()
                 
-                # 출력
+                # 3. 화면 출력 (테마 그룹핑)
                 df = pd.DataFrame(analyzed_data)
                 grouped = df.groupby('테마')
                 theme_order = grouped['점수'].mean().sort_values(ascending=False).index
                 
                 for theme in theme_order:
                     group_df = grouped.get_group(theme)
-                    if group_df['점수'].max() < 40: continue
+                    if group_df['점수'].max() < 40: continue # 점수 낮은 테마 생략
                     
                     st.markdown(f"<div class='theme-header'>📦 {theme}</div>", unsafe_allow_html=True)
                     
                     for idx, row in group_df.head(5).iterrows():
                         price_cls = "price-up" if row['등락'] > 0 else "price-down"
                         icon = "🔥" if row['등락'] > 10 else ("🔺" if row['등락'] > 0 else "🔹")
+                        
                         badges = ""
                         if row['점수'] >= 90: badges += "<span class='badge-s'>S급</span>"
                         if row['신고가']: badges += f"<span class='badge-new'>{row['신고가']}</span>"
@@ -398,10 +374,15 @@ else:
                         with st.container():
                             st.markdown(f"""
                             <div class="stock-card">
-                                <div><span class="stock-title">{row['종목']}</span> {badges} <span class="{price_cls}">{icon} {row['등락']}%</span></div>
-                                <div style="margin-top:10px; font-size:0.9rem; color:#ccc;">
-                                    <div>🤖 {row['흐름']}</div>
-                                    <div>👽 외인(5일): {', '.join(row['외인'])}</div>
+                                <div>
+                                    <span class="stock-title">{row['종목']}</span> {badges} 
+                                    <span class="{price_cls}">{icon} {row['등락']}%</span>
+                                </div>
+                                <div style="margin-top:5px; font-size:0.9rem; color:#ddd;">현재가: {row['현재가']:,}원</div>
+                                <hr style="border-color:#333; margin:10px 0;">
+                                <div class="info-txt">
+                                    <div class="flow-txt">🤖 {row['흐름']}</div>
+                                    <div style="margin-top:4px;">👽 외인(5일): {', '.join(row['외인'])}</div>
                                 </div>
                                 <a href="#" class="news-item">📰 {row['뉴스'][:30]}...</a>
                             </div>
