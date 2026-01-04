@@ -22,7 +22,6 @@ st.markdown("""
 <style>
     .stApp { background-color: #f4f6f9; font-family: 'Pretendard', sans-serif; }
     
-    /* 헤더 */
     .main-title {
         font-size: 1.8rem; font-weight: 800; color: #1A237E;
         margin-bottom: 0.5rem; padding-left: 10px;
@@ -30,7 +29,6 @@ st.markdown("""
     }
     .sub-title { font-size: 0.95rem; color: #666; margin-bottom: 2rem; padding-left: 15px; }
     
-    /* 테마 박스 */
     .theme-box {
         background-color: #ffffff; border-radius: 16px; padding: 25px;
         margin-bottom: 25px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
@@ -43,7 +41,6 @@ st.markdown("""
     }
     .theme-stat { font-size: 0.9rem; color: #e74c3c; margin-left: auto; font-weight: 700; }
     
-    /* 종목 카드 */
     .stock-card {
         background-color: #f8f9fa; border: 1px solid #e9ecef;
         border-radius: 12px; padding: 18px; margin-bottom: 12px;
@@ -56,17 +53,14 @@ st.markdown("""
         box-shadow: 0 5px 15px rgba(26, 35, 126, 0.1);
     }
     
-    /* 카드 상단 */
     .card-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
     .stock-name { font-size: 1.15rem; font-weight: 800; color:#222; }
     .rate-up { color: #d32f2f; font-weight:800; font-size: 1.1rem; }
     .rate-down { color: #1976d2; font-weight:800; font-size: 1.1rem; }
     
-    /* 뱃지 */
     .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-right: 6px; vertical-align: middle; }
     .badge-rank { background:#333; color:white; }
     
-    /* 전문가 분석 섹션 (Highlight) */
     .expert-box {
         margin-top: 10px; padding: 10px; border-radius: 8px;
         background-color: #fff; border: 1px dashed #ced4da;
@@ -75,19 +69,17 @@ st.markdown("""
     .expert-label { font-weight: 700; color: #1A237E; }
     .expert-val { font-family: monospace; font-weight: 600; }
     
-    /* 뉴스 링크 */
     .news-section { margin-top: 8px; font-size: 0.85rem; color: #888; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
     .news-link { text-decoration: none; color: #666; font-weight: 500; }
     .news-link:hover { color: #e74c3c; text-decoration: underline; }
     
-    /* 프로그레스 바 커스텀 (종가 고가 확률) */
     .prob-bar-bg { width: 100%; height: 6px; background-color: #e9ecef; border-radius: 3px; margin-top: 5px; overflow: hidden; }
     .prob-bar-fill { height: 100%; background: linear-gradient(90deg, #ffc107, #ff5722); }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🧠 2. 데이터 엔진 (Smart Token & Expert Logic)
+# 🧠 2. 데이터 엔진
 # ==========================================
 
 class KIS_API:
@@ -96,48 +88,37 @@ class KIS_API:
         self.secret = app_secret
         self.base_url = "https://openapi.koreainvestment.com:9443"
         self.token = None
-        self.token_file = "kis_token_save.json" # 토큰 저장 파일
+        self.token_file = "kis_token_save.json"
 
     def auth(self):
-        """스마트 토큰 관리: 파일에서 읽거나 새로 발급"""
         # 1. 저장된 토큰 확인
         if os.path.exists(self.token_file):
             try:
                 with open(self.token_file, 'r') as f:
                     data = json.load(f)
-                
-                # 유효기간 체크 (10분 여유)
                 expire_dt = datetime.strptime(data['expired'], "%Y-%m-%d %H:%M:%S")
                 if datetime.now() < expire_dt:
                     self.token = data['token']
-                    return True # 저장된 토큰 사용 (API 호출 X)
-            except:
-                pass 
+                    return True
+            except: pass
 
-        # 2. 새로 발급 (API 호출 O)
+        # 2. 새로 발급
         try:
             headers = {"content-type": "application/json"}
             body = {"grant_type": "client_credentials", "appkey": self.key, "appsecret": self.secret}
             res = requests.post(f"{self.base_url}/oauth2/tokenP", headers=headers, json=body)
-            
             if res.status_code == 200:
                 res_json = res.json()
                 self.token = res_json["access_token"]
-                
-                # 만료 시간 계산 (24시간)
                 expires_in = int(res_json.get("expires_in", 86400))
                 expire_dt = datetime.now() + timedelta(seconds=expires_in - 600)
-                
-                # 파일 저장
                 with open(self.token_file, 'w') as f:
                     json.dump({"token": self.token, "expired": expire_dt.strftime("%Y-%m-%d %H:%M:%S")}, f)
-                    
                 return True
             return False
         except: return False
 
     def get_price_detail(self, code):
-        """현재가, 고가, 저가, 거래량 모두 가져옴"""
         if not self.token: return None
         try:
             headers = {
@@ -148,7 +129,6 @@ class KIS_API:
             }
             params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}
             res = requests.get(f"{self.base_url}/uapi/domestic-stock/v1/quotation/inquire-price", headers=headers, params=params)
-            
             if res.status_code == 200:
                 d = res.json()['output']
                 return {
@@ -156,13 +136,11 @@ class KIS_API:
                     'high': int(d['stck_hgpr']), 'low': int(d['stck_lwpr']),
                     'vol': int(d['acml_vol'])
                 }
-            # 토큰 만료 에러(401, 403) 시 파일 삭제
             elif res.status_code in [401, 403]:
                 if os.path.exists(self.token_file): os.remove(self.token_file)
         except: pass
         return None
 
-# 네이버 크롤링 (API 실패 시 백업)
 def get_naver_detail_backup(code):
     try:
         url = f"https://finance.naver.com/item/main.naver?code={code}"
@@ -174,7 +152,6 @@ def get_naver_detail_backup(code):
     except:
         return {'price': 0, 'rate': 0.0, 'high': 0, 'low': 0, 'vol': 0}
 
-# ⚡ [고수 기능 1] 프로그램/외인 수급 추적
 def get_smart_money_flow(code):
     try:
         url = f"https://finance.naver.com/item/frgn.naver?code={code}"
@@ -187,12 +164,11 @@ def get_smart_money_flow(code):
         for row in rows:
             cols = row.select('td')
             if len(cols) > 3 and cols[0].text.strip() != "":
-                f_val = int(cols[6].text.replace(',', '')) // 1000 # 천주 단위
+                f_val = int(cols[6].text.replace(',', '')) // 1000
                 f_trend.append(f_val)
                 cnt += 1
                 if cnt >= 3: break
-                
-        # 🤖 프로그램 매매 추정 로직
+        
         prog_msg = "관망세"
         if f_trend and f_trend[0] > 0:
             if f_trend[0] > 50: prog_msg = "🔥프로그램 대량 매수"
@@ -205,28 +181,21 @@ def get_smart_money_flow(code):
     except:
         return [], "분석불가"
 
-# ⚡ [고수 기능 2] 종가 고가(High Close) 마감 확률 계산
 def calc_power_close(price, high, low):
     if high == low: return 50
     position = (price - low) / (high - low) * 100
     return int(position)
 
-# 통합 데이터 수집 함수
 def get_full_analysis(code, name, kis_instance):
-    # 1. 시세 데이터 (API -> Web)
     data = kis_instance.get_price_detail(code)
     source = "API"
     if not data:
         data = get_naver_detail_backup(code)
         source = "Web"
     
-    # 2. 수급 및 프로그램 분석
     f_trend, prog_msg = get_smart_money_flow(code)
-    
-    # 3. 고수 지표 계산 (파워 클로즈)
     power_score = calc_power_close(data['price'], data['high'], data['low'])
     
-    # 4. 뉴스 가져오기
     news = "관련 뉴스 없음"
     try:
         url = f"https://finance.naver.com/item/news_news.naver?code={code}"
@@ -247,10 +216,12 @@ def get_themes():
     themes = []
     try:
         url = "https://finance.naver.com/sise/theme.naver"
-        soup = BeautifulSoup(requests.get(url, headers={'User-Agent':'Mozilla/5.0'}).text, 'html.parser')
+        res = requests.get(url, headers={'User-Agent':'Mozilla/5.0'})
+        soup = BeautifulSoup(res.text, 'html.parser')
         for t in soup.select('.col_type1 a')[:5]:
             link = "https://finance.naver.com" + t['href']
-            sub_soup = BeautifulSoup(requests.get(link, headers={'User-Agent':'Mozilla/5.0'}).text, 'html.parser')
+            sub_res = requests.get(link, headers={'User-Agent':'Mozilla/5.0'})
+            sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
             stocks = []
             for row in sub_soup.select('.type_5 tbody tr'):
                 cols = row.select('td')
@@ -281,8 +252,6 @@ st.markdown('<div class="sub-title">고수들의 관점: <b>프로그램 수급<
 if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="primary"):
     
     kis = KIS_API(APP_KEY, APP_SECRET)
-    
-    # auth()가 알아서 토큰을 재활용하거나 새로 받음
     if kis.auth(): 
         if os.path.exists("kis_token_save.json"):
             st.toast("저장된 토큰 사용 (API 호출 절약) ⚡", icon="💾")
@@ -297,73 +266,72 @@ if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="prim
     if not themes: st.error("데이터 수신 실패")
     
     for theme in themes:
-        st.markdown(f"""
-        <div class="theme-box">
-            <div class="theme-header">
-                📦 [{theme['theme']}] 섹터
-                <span class="theme-stat">🔥 주도주 Top 3</span>
-            </div>
-        """, unsafe_allow_html=True)
+        # 🚨 [수정 핵심] HTML 들여쓰기 제거를 위해 문자열 연결 방식 사용
+        html_content = ""
+        html_content += f'<div class="theme-box">'
+        html_content += f'  <div class="theme-header">'
+        html_content += f'      📦 [{theme["theme"]}] 섹터'
+        html_content += f'      <span class="theme-stat">🔥 주도주 Top 3</span>'
+        html_content += f'  </div>'
+        
+        st.markdown(html_content, unsafe_allow_html=True)
         
         for idx, s in enumerate(theme['stocks']):
             d = get_full_analysis(s['code'], s['name'], kis)
             
-            # 스타일링
             p_fmt = f"{d['price']:,}원"
             rate_cls = "rate-up" if d['rate'] > 0 else "rate-down"
             rate_icon = "🔥" if d['rate'] >= 10 else ("🔺" if d['rate'] > 0 else "🔹")
             rank_icon = ["🥇대장", "🥈2등", "🥉3등"][idx]
             
-            # 파워 클로즈 멘트
             power_bar_width = d['power_score']
             power_ment = "일반 마감"
             if power_bar_width > 80: power_ment = "👑 최고가 마감 임박 (Buy)"
             elif power_bar_width > 50: power_ment = "양호한 흐름"
             elif power_bar_width < 20: power_ment = "윗꼬리 발생 (주의)"
             
-            # 외인 수급
             f_str = str(d['f_trend']).replace('[','').replace(']','') if d['f_trend'] else "-"
             
-            # HTML 생성
-            card_html = f"""
-<div class="stock-card">
-    <div class="card-top-row">
-        <div>
-            <span class="badge badge-rank">{rank_icon}</span>
-            <span class="stock-name">{s['name']}</span>
-            <span style="font-size:0.7rem; color:#bbb; margin-left:4px;">{d['source']}</span>
-        </div>
-        <div>
-            <span class="{rate_cls}">{rate_icon} {d['rate']}%</span>
-            <span style="font-size:0.95rem; font-weight:700; color:#333; margin-left:8px;">{p_fmt}</span>
-        </div>
-    </div>
-    
-    <div class="expert-box">
-        <div class="expert-row">
-            <span class="expert-label">🤖 프로그램 추정</span>
-            <span class="expert-val" style="color:#1A237E;">{d['prog_msg']}</span>
-        </div>
-        <div class="expert-row">
-            <span class="expert-label">👽 외인(3일)</span>
-            <span class="expert-val">{f_str}</span>
-        </div>
-        <div style="margin-top:8px;">
-            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; font-weight:bold;">
-                <span>⚡ 마감 강도(Power Close)</span>
-                <span>{power_ment} ({d['power_score']}%)</span>
-            </div>
-            <div class="prob-bar-bg">
-                <div class="prob-bar-fill" style="width: {power_bar_width}%;"></div>
-            </div>
-        </div>
-    </div>
+            # 🚨 [수정 핵심] HTML 코드를 한 줄씩 이어 붙여서 들여쓰기 문제 원천 차단
+            card_html = ""
+            card_html += f'<div class="stock-card">'
+            card_html += f'  <div class="card-top-row">'
+            card_html += f'    <div>'
+            card_html += f'      <span class="badge badge-rank">{rank_icon}</span>'
+            card_html += f'      <span class="stock-name">{s["name"]}</span>'
+            card_html += f'      <span style="font-size:0.7rem; color:#bbb; margin-left:4px;">{d["source"]}</span>'
+            card_html += f'    </div>'
+            card_html += f'    <div>'
+            card_html += f'      <span class="{rate_cls}">{rate_icon} {d["rate"]}%</span>'
+            card_html += f'      <span style="font-size:0.95rem; font-weight:700; color:#333; margin-left:8px;">{p_fmt}</span>'
+            card_html += f'    </div>'
+            card_html += f'  </div>'
+            
+            card_html += f'  <div class="expert-box">'
+            card_html += f'    <div class="expert-row">'
+            card_html += f'      <span class="expert-label">🤖 프로그램 추정</span>'
+            card_html += f'      <span class="expert-val" style="color:#1A237E;">{d["prog_msg"]}</span>'
+            card_html += f'    </div>'
+            card_html += f'    <div class="expert-row">'
+            card_html += f'      <span class="expert-label">👽 외인(3일)</span>'
+            card_html += f'      <span class="expert-val">{f_str}</span>'
+            card_html += f'    </div>'
+            card_html += f'    <div style="margin-top:8px;">'
+            card_html += f'      <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; font-weight:bold;">'
+            card_html += f'        <span>⚡ 마감 강도(Power Close)</span>'
+            card_html += f'        <span>{power_ment} ({d["power_score"]}%)</span>'
+            card_html += f'      </div>'
+            card_html += f'      <div class="prob-bar-bg">'
+            card_html += f'        <div class="prob-bar-fill" style="width: {power_bar_width}%;"></div>'
+            card_html += f'      </div>'
+            card_html += f'    </div>'
+            card_html += f'  </div>'
 
-    <div class="news-section">
-        📰 <a href="#" class="news-link">{d['news']}</a>
-    </div>
-</div>
-"""
+            card_html += f'  <div class="news-section">'
+            card_html += f'    📰 <a href="#" class="news-link">{d["news"]}</a>'
+            card_html += f'  </div>'
+            card_html += f'</div>'
+
             st.markdown(card_html, unsafe_allow_html=True)
             
-        st.markdown("</div>", unsafe_allow_html=True)
+        st.markdown('</div>', unsafe_allow_html=True)
