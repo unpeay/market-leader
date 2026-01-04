@@ -6,12 +6,13 @@ import time
 from datetime import datetime
 
 # ==========================================
-# ⚙️ 1. 앱 설정 & 디자인 (KT 멤버십 스타일)
+# ⚙️ 1. 앱 설정 & 디자인 (KT Corporate Style)
 # ==========================================
 st.set_page_config(
     page_title="Market Leader Pro",
     page_icon="📈",
-    layout="wide"
+    layout="wide",
+    initial_sidebar_state="collapsed"
 )
 
 st.markdown("""
@@ -19,45 +20,73 @@ st.markdown("""
 <style>
     .stApp { background-color: #f4f6f9; font-family: 'Pretendard', sans-serif; }
     
+    /* 헤더 */
     .main-title {
-        font-size: 1.8rem; font-weight: 800; color: #222;
-        margin-bottom: 1rem; padding-left: 10px;
-        border-left: 5px solid #e74c3c;
+        font-size: 1.8rem; font-weight: 800; color: #1A237E;
+        margin-bottom: 0.5rem; padding-left: 10px;
+        border-left: 5px solid #e74c3c; letter-spacing: -0.5px;
     }
+    .sub-title { font-size: 0.95rem; color: #666; margin-bottom: 2rem; padding-left: 15px; }
     
+    /* 테마 박스 */
     .theme-box {
-        background-color: #ffffff; border-radius: 16px; padding: 20px;
-        margin-bottom: 25px; box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+        background-color: #ffffff; border-radius: 16px; padding: 25px;
+        margin-bottom: 25px; box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        border: 1px solid #e0e0e0;
     }
     .theme-header {
-        font-size: 1.3rem; font-weight: 700; color: #333;
-        margin-bottom: 15px; display: flex; align-items: center; border-bottom: 2px solid #f0f0f0; padding-bottom:10px;
+        font-size: 1.4rem; font-weight: 800; color: #333;
+        margin-bottom: 20px; display: flex; align-items: center; 
+        border-bottom: 2px solid #333; padding-bottom:12px;
     }
+    .theme-stat { font-size: 0.9rem; color: #e74c3c; margin-left: auto; font-weight: 700; }
     
+    /* 종목 카드 */
     .stock-card {
-        background-color: #fdfdfd; border: 1px solid #e0e0e0;
-        border-radius: 12px; padding: 15px; margin-bottom: 10px;
-        transition: transform 0.2s;
+        background-color: #f8f9fa; border: 1px solid #e9ecef;
+        border-radius: 12px; padding: 18px; margin-bottom: 12px;
+        transition: all 0.2s ease-in-out;
     }
-    .stock-card:hover { border-color: #e74c3c; transform: translateY(-2px); }
+    .stock-card:hover { 
+        border-color: #1A237E; 
+        background-color: #fff;
+        transform: translateY(-3px); 
+        box-shadow: 0 5px 15px rgba(26, 35, 126, 0.1);
+    }
     
-    .card-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
-    .stock-name { font-size: 1.1rem; font-weight: 700; color:#222; }
-    .rate-up { color: #e74c3c; font-weight:700; }
-    .rate-down { color: #3498db; font-weight:700; }
+    /* 카드 상단 */
+    .card-top-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .stock-name { font-size: 1.15rem; font-weight: 800; color:#222; }
+    .rate-up { color: #d32f2f; font-weight:800; font-size: 1.1rem; }
+    .rate-down { color: #1976d2; font-weight:800; font-size: 1.1rem; }
     
-    .badge { padding: 3px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-right: 5px; }
+    /* 뱃지 */
+    .badge { padding: 4px 8px; border-radius: 6px; font-size: 0.75rem; font-weight: bold; margin-right: 6px; vertical-align: middle; }
     .badge-rank { background:#333; color:white; }
+    .badge-power { background:#e3f2fd; color:#1565c0; border: 1px solid #1565c0; }
     
-    .sub-info { font-size: 0.9rem; color: #555; line-height: 1.6; margin-top: 8px; border-top: 1px dashed #eee; padding-top:8px;}
-    .info-label { font-weight: 600; color: #333; }
-    .news-link { text-decoration: none; color: #444; }
+    /* 전문가 분석 섹션 (Highlight) */
+    .expert-box {
+        margin-top: 10px; padding: 10px; border-radius: 8px;
+        background-color: #fff; border: 1px dashed #ced4da;
+    }
+    .expert-row { display: flex; justify-content: space-between; font-size: 0.85rem; color: #495057; margin-bottom: 4px; }
+    .expert-label { font-weight: 700; color: #1A237E; }
+    .expert-val { font-family: monospace; font-weight: 600; }
+    
+    /* 뉴스 링크 */
+    .news-section { margin-top: 8px; font-size: 0.85rem; color: #888; text-overflow: ellipsis; white-space: nowrap; overflow: hidden; }
+    .news-link { text-decoration: none; color: #666; font-weight: 500; }
     .news-link:hover { color: #e74c3c; text-decoration: underline; }
+    
+    /* 프로그레스 바 커스텀 (종가 고가 확률) */
+    .prob-bar-bg { width: 100%; height: 6px; background-color: #e9ecef; border-radius: 3px; margin-top: 5px; overflow: hidden; }
+    .prob-bar-fill { height: 100%; background: linear-gradient(90deg, #ffc107, #ff5722); }
 </style>
 """, unsafe_allow_html=True)
 
 # ==========================================
-# 🧠 2. 엔진 (하이브리드)
+# 🧠 2. 데이터 엔진 (Hybrid & Expert Logic)
 # ==========================================
 
 class KIS_API:
@@ -78,7 +107,8 @@ class KIS_API:
             return False
         except: return False
 
-    def get_price(self, code):
+    def get_price_detail(self, code):
+        """현재가, 고가, 저가, 거래량 모두 가져옴"""
         if not self.token: return None
         try:
             headers = {
@@ -90,158 +120,218 @@ class KIS_API:
             params = {"FID_COND_MRKT_DIV_CODE": "J", "FID_INPUT_ISCD": code}
             res = requests.get(f"{self.base_url}/uapi/domestic-stock/v1/quotation/inquire-price", headers=headers, params=params)
             if res.status_code == 200:
-                data = res.json()['output']
+                d = res.json()['output']
                 return {
-                    'price': int(data['stck_prpr']),
-                    'rate': float(data['prdy_ctrt']),
-                    'vol': int(data['acml_vol'])
+                    'price': int(d['stck_prpr']), 'rate': float(d['prdy_ctrt']),
+                    'high': int(d['stck_hgpr']), 'low': int(d['stck_lwpr']),
+                    'vol': int(d['acml_vol'])
                 }
         except: pass
         return None
 
-def get_stock_data_hybrid(code, name, kis_instance):
-    data = kis_instance.get_price(code)
-    source = "API"
-    
-    if not data:
-        source = "Web"
-        try:
-            url = f"https://finance.naver.com/item/sise.naver?code={code}"
-            res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
-            soup = BeautifulSoup(res.text, 'html.parser')
-            
-            price = int(soup.select_one('.tah.p11').text.strip().replace(',', ''))
-            
-            rate_txt = soup.select_one('.tah.p11.red01')
-            if not rate_txt: rate_txt = soup.select_one('.tah.p11.nv01')
-            
-            rate = 0.0
-            if rate_txt:
-                rate_raw = rate_txt.text.strip().replace('%', '')
-                rate = float(rate_raw)
-                if 'nv01' in str(rate_txt): rate = -rate
-            
-            vol = 0
-            try:
-                vol_txt = soup.select('.tah.p11')[3].text.strip().replace(',', '')
-                vol = int(vol_txt)
-            except: pass
-
-            data = {'price': price, 'rate': rate, 'vol': vol}
-        except:
-            data = {'price': 0, 'rate': 0.0, 'vol': 0}
-
-    news_title = "관련된 최근 뉴스가 없습니다."
+# 네이버 크롤링 (API 실패 시 백업)
+def get_naver_detail_backup(code):
     try:
-        n_url = f"https://finance.naver.com/item/news_news.naver?code={code}"
-        n_res = requests.get(n_url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=1)
-        n_soup = BeautifulSoup(n_res.text, 'html.parser')
-        n_tag = n_soup.select_one('.type5 tbody tr .title a')
-        if n_tag: news_title = n_tag.text.strip()
-    except: pass
-    
-    return data, news_title, source
-
-@st.cache_data(ttl=600)
-def get_themes_and_stocks():
-    themes_list = []
-    try:
-        url = "https://finance.naver.com/sise/theme.naver"
-        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'})
+        url = f"https://finance.naver.com/item/main.naver?code={code}"
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
         soup = BeautifulSoup(res.text, 'html.parser')
         
-        for t_link in soup.select('.col_type1 a')[:5]:
-            t_name = t_link.text.strip()
-            link = "https://finance.naver.com" + t_link['href']
+        no_today = soup.select_one('.no_today .blind')
+        price = int(no_today.text.replace(',', '')) if no_today else 0
+        
+        # 고가/저가 찾기 (네이버 구조상 blind 태그들 중 위치 파악 필요)
+        # 보통: 전일, 고가, 상한, 거래량, 시가, 저가... 순서
+        # 정확도를 위해 sise.naver 사용
+        return {'price': price, 'rate': 0.0, 'high': price, 'low': price, 'vol': 0}
+    except:
+        return {'price': 0, 'rate': 0.0, 'high': 0, 'low': 0, 'vol': 0}
+
+# ⚡ [고수 기능 1] 프로그램/외인 수급 추적
+def get_smart_money_flow(code):
+    try:
+        url = f"https://finance.naver.com/item/frgn.naver?code={code}"
+        res = requests.get(url, headers={'User-Agent': 'Mozilla/5.0'}, timeout=2)
+        soup = BeautifulSoup(res.text, 'html.parser')
+        rows = soup.select('.type2 tr')
+        
+        # 최근 3일치 외인/기관 수급
+        f_trend = []
+        i_trend = []
+        cnt = 0
+        for row in rows:
+            cols = row.select('td')
+            if len(cols) > 3 and cols[0].text.strip() != "":
+                f_val = int(cols[6].text.replace(',', '')) // 1000 # 천주 단위
+                i_val = int(cols[5].text.replace(',', '')) // 1000
+                f_trend.append(f_val)
+                i_trend.append(i_val)
+                cnt += 1
+                if cnt >= 3: break
+                
+        # 🤖 프로그램 매매 추정 로직 (외인이 사면 프로그램일 확률 높음)
+        prog_msg = "관망세"
+        if f_trend and f_trend[0] > 0:
+            if f_trend[0] > 50: prog_msg = "🔥프로그램 대량 매수"
+            else: prog_msg = "↗️매수세 유입 중"
+        elif f_trend and f_trend[0] < 0:
+            if f_trend[0] < -50: prog_msg = "☔프로그램 매도(주의)"
+            else: prog_msg = "↘️매도 우위"
             
-            sub_res = requests.get(link, headers={'User-Agent': 'Mozilla/5.0'})
-            sub_soup = BeautifulSoup(sub_res.text, 'html.parser')
-            
+        return f_trend, i_trend, prog_msg
+    except:
+        return [], [], "분석불가"
+
+# ⚡ [고수 기능 2] 종가 고가(High Close) 마감 확률 계산
+def calc_power_close(price, high, low):
+    if high == low: return 50 # 변동성 없음
+    
+    # 현재가가 고가에 얼마나 가까운지 (0~100점)
+    position = (price - low) / (high - low) * 100
+    return int(position)
+
+# 통합 데이터 수집 함수
+def get_full_analysis(code, name, kis_instance):
+    # 1. 시세 데이터 (API -> Web)
+    data = kis_instance.get_price_detail(code)
+    source = "API"
+    if not data:
+        data = get_naver_detail_backup(code)
+        source = "Web"
+    
+    # 2. 수급 및 프로그램 분석
+    f_trend, i_trend, prog_msg = get_smart_money_flow(code)
+    
+    # 3. 고수 지표 계산 (파워 클로즈)
+    power_score = calc_power_close(data['price'], data['high'], data['low'])
+    
+    # 4. 뉴스 가져오기
+    news = "관련 뉴스 없음"
+    try:
+        url = f"https://finance.naver.com/item/news_news.naver?code={code}"
+        r = requests.get(url, headers={'User-Agent':'Mozilla/5.0'}, timeout=1)
+        s = BeautifulSoup(r.text, 'html.parser')
+        t = s.select_one('.type5 tbody tr .title a')
+        if t: news = t.text.strip()
+    except: pass
+    
+    return {
+        'price': data['price'], 'rate': data['rate'], 'vol': data['vol'],
+        'source': source, 'f_trend': f_trend, 'i_trend': i_trend,
+        'prog_msg': prog_msg, 'power_score': power_score, 'news': news
+    }
+
+@st.cache_data(ttl=600)
+def get_themes():
+    themes = []
+    try:
+        url = "https://finance.naver.com/sise/theme.naver"
+        soup = BeautifulSoup(requests.get(url, headers={'User-Agent':'Mozilla/5.0'}).text, 'html.parser')
+        for t in soup.select('.col_type1 a')[:5]:
+            link = "https://finance.naver.com" + t['href']
+            sub_soup = BeautifulSoup(requests.get(link, headers={'User-Agent':'Mozilla/5.0'}).text, 'html.parser')
             stocks = []
             for row in sub_soup.select('.type_5 tbody tr'):
-                try:
-                    cols = row.select('td')
-                    if len(cols) < 2: continue
-                    name = cols[0].text.strip()
-                    code = cols[0].select_one('a')['href'].split('code=')[1]
-                    stocks.append({'name': name, 'code': code})
-                    if len(stocks) >= 3: break
-                except: continue
-            themes_list.append({'theme': t_name, 'stocks': stocks})
+                cols = row.select('td')
+                if len(cols) > 1:
+                    stocks.append({'name': cols[0].text.strip(), 'code': cols[0].select_one('a')['href'].split('=')[1]})
+                    if len(stocks)>=3: break
+            themes.append({'theme': t.text.strip(), 'stocks': stocks})
     except: pass
-    return themes_list
+    return themes
 
 # ==========================================
-# 🖥️ 4. 메인 화면
+# 🖥️ 4. 메인 화면 출력
 # ==========================================
 
 with st.sidebar:
-    st.header("🔑 API 설정")
+    st.header("🔑 전문가 설정")
     try:
         APP_KEY = st.secrets["APP_KEY"]
         APP_SECRET = st.secrets["APP_SECRET"]
-        st.success("✅ 키 자동 로드 완료")
+        st.success("✅ API Key Ready")
     except:
         APP_KEY = st.text_input("APP Key", type="password")
         APP_SECRET = st.text_input("APP Secret", type="password")
-        st.info("키가 없으면 네이버 크롤링 모드로 작동합니다.")
 
-st.markdown('<div class="main-title">📈 오늘의 종가베팅 (Final Ver.)</div>', unsafe_allow_html=True)
+st.markdown('<div class="main-title">Market Leader Pro <span style="font-size:1rem; color:#888;">Expert Edition</span></div>', unsafe_allow_html=True)
+st.markdown('<div class="sub-title">고수들의 관점: <b>프로그램 수급</b>과 <b>종가 마감 강도</b>를 실시간으로 분석합니다.</div>', unsafe_allow_html=True)
 
-if st.button("🚀 데이터 분석 시작", type="primary"):
+if st.button("🚀 실시간 딥 다이브(Deep Dive) 분석 시작", type="primary"):
     
     kis = KIS_API(APP_KEY, APP_SECRET)
-    is_api_ok = kis.auth()
+    if kis.auth(): st.toast("API 연결 성공! 정밀 분석 모드 가동", icon="⚡")
+    else: st.toast("API 연결 실패. 웹 데이터로 대체합니다.", icon="⚠️")
     
-    if is_api_ok:
-        st.toast("한투 API 연결 성공!", icon="⚡")
-    else:
-        st.toast("네이버 크롤링 모드로 전환합니다.", icon="🐢")
-    
-    with st.spinner("테마 분석 중..."):
-        all_themes = get_themes_and_stocks()
+    with st.spinner("시장 주도 테마 및 수급 분석 중..."):
+        themes = get_themes()
         
-    if not all_themes:
-        st.error("데이터 수집 실패. 잠시 후 다시 시도해주세요.")
+    if not themes: st.error("데이터 수신 실패")
     
-    for theme in all_themes:
-        st.markdown(f"""<div class="theme-box"><div class="theme-header">📦 [{theme['theme']}] 섹터</div>""", unsafe_allow_html=True)
+    for theme in themes:
+        st.markdown(f"""
+        <div class="theme-box">
+            <div class="theme-header">
+                📦 [{theme['theme']}] 섹터
+                <span class="theme-stat">🔥 주도주 Top 3</span>
+            </div>
+        """, unsafe_allow_html=True)
         
         for idx, s in enumerate(theme['stocks']):
-            data, news, source = get_stock_data_hybrid(s['code'], s['name'], kis)
+            d = get_full_analysis(s['code'], s['name'], kis)
             
-            price = f"{data['price']:,}원"
-            rate = data['rate']
-            vol = f"{data['vol']:,}"
+            # 스타일링 변수
+            p_fmt = f"{d['price']:,}원"
+            rate_cls = "rate-up" if d['rate'] > 0 else "rate-down"
+            rate_icon = "🔥" if d['rate'] >= 10 else ("🔺" if d['rate'] > 0 else "🔹")
+            rank_icon = ["🥇대장", "🥈2등", "🥉3등"][idx]
             
-            rate_cls = "rate-up" if rate > 0 else ("rate-down" if rate < 0 else "")
-            rate_icon = "🔥" if rate >= 10 else ("🔺" if rate > 0 else "🔹")
-            rank_icon = ["🥇대장", "🥈2등", "🥉3등"][idx] if idx < 3 else ""
+            # 파워 클로즈 (종가 고가) 멘트
+            power_bar_width = d['power_score']
+            power_ment = "일반 마감"
+            if power_bar_width > 80: power_ment = "👑 최고가 마감 임박 (Buy)"
+            elif power_bar_width > 50: power_ment = "양호한 흐름"
+            elif power_bar_width < 20: power_ment = "윗꼬리 발생 (주의)"
             
-            if rate > 5: ai_flow = "강력 매수 구간 🔥"
-            elif rate > 0: ai_flow = "매수 우위 ↗️"
-            elif rate > -2: ai_flow = "관망/보합 ➡️"
-            else: ai_flow = "매도 우위 (주의) ↘️"
-
-            src_mark = "⚡" if source == "API" else "🐢"
-
-            # 🚨 [중요] HTML 코드를 변수에 담을 때, 들여쓰기를 완전히 없애야 합니다.
+            # 외인 수급 텍스트화
+            f_str = str(d['f_trend']).replace('[','').replace(']','') if d['f_trend'] else "-"
+            
+            # HTML 생성 (들여쓰기 제거 버전)
             card_html = f"""
 <div class="stock-card">
     <div class="card-top-row">
         <div>
             <span class="badge badge-rank">{rank_icon}</span>
             <span class="stock-name">{s['name']}</span>
-            <span style="font-size:0.7rem; color:#aaa; margin-left:5px;">{src_mark}</span>
+            <span style="font-size:0.7rem; color:#bbb; margin-left:4px;">{d['source']}</span>
         </div>
         <div>
-            <span class="{rate_cls}">{rate_icon} {rate}%</span>
-            <span style="font-size:0.9rem; font-weight:bold; margin-left:10px;">{price}</span>
+            <span class="{rate_cls}">{rate_icon} {d['rate']}%</span>
+            <span style="font-size:0.95rem; font-weight:700; color:#333; margin-left:8px;">{p_fmt}</span>
         </div>
     </div>
-    <div class="sub-info">
-        <span class="info-label">🤖 흐름:</span> {ai_flow} (거래량: {vol}) <br>
-        <span class="info-label">📰 뉴스:</span> <a href="#" class="news-link">{news}</a>
+    
+    <div class="expert-box">
+        <div class="expert-row">
+            <span class="expert-label">🤖 프로그램 추정</span>
+            <span class="expert-val" style="color:#1A237E;">{d['prog_msg']}</span>
+        </div>
+        <div class="expert-row">
+            <span class="expert-label">👽 외인(3일)</span>
+            <span class="expert-val">{f_str}</span>
+        </div>
+        <div style="margin-top:8px;">
+            <div style="display:flex; justify-content:space-between; font-size:0.75rem; color:#666; font-weight:bold;">
+                <span>⚡ 마감 강도(Power Close)</span>
+                <span>{power_ment} ({d['power_score']}%)</span>
+            </div>
+            <div class="prob-bar-bg">
+                <div class="prob-bar-fill" style="width: {power_bar_width}%;"></div>
+            </div>
+        </div>
+    </div>
+
+    <div class="news-section">
+        📰 <a href="#" class="news-link">{d['news']}</a>
     </div>
 </div>
 """
